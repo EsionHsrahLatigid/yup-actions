@@ -30,11 +30,6 @@ on:
         required: false
         default: false
         type: boolean
-      force_heavy:
-        description: Force or skip heavy jobs for workflow_dispatch
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: read
@@ -60,7 +55,7 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.sha }}
           BASE_REF: ${{ github.base_ref }}
-          FORCE_HEAVY: ${{ inputs.force_heavy }}
+          FORCE_HEAVY: ${{ github.event.inputs.force_heavy }}
         run: |
           set -euo pipefail
           run_heavy=true
