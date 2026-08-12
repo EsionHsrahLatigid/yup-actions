@@ -34,7 +34,7 @@ jobs:
       windows_release_targets_json: '["ehl_stage_products","blackthrum_engine_tests","blackthrum_plugin_bridge_tests"]'
 ```
 
-Pin callers to a full commit SHA. The reusable workflow provides change classification, macOS arm64 and Windows x64 build/test/package jobs, compiler caching on macOS, checksummed latest ZIP artifacts, and a stable summary check.
+Pin callers to a full commit SHA. The reusable workflow provides change classification, macOS arm64 and Windows x64 build/test/package jobs, compiler caching on macOS, checksummed latest ZIP artifacts, and a stable summary check. Both platform jobs initialize direct Git submodules, allowing plugin repositories to pin public shared modules without fetching nested submodules or adding cross-repository credentials.
 
 `plugin-release.yml` promotes the exact successful `main` CI artifacts for a version tag without rebuilding platform bundles.
 
