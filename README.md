@@ -47,7 +47,24 @@ cmake --preset plugin-release
 cmake --build --preset plugin-release --parallel
 ```
 
-The build preset should include `ehl_stage_products`, so the human-facing tree is refreshed automatically.
+The build preset should include `ehl_stage_products`, so the human-facing tree is refreshed automatically. On local macOS builds outside CI, that target also replaces the exact matching user-installed bundles with physical copies from the staged tree:
+
+```text
+~/Library/Audio/Plug-Ins/
+├── VST3/<slug>_vst3_plugin.vst3
+└── Components/<slug>_au_plugin.component
+```
+
+Standalone applications remain in `artifacts/`. CI and non-macOS builds do not install user plugins. Override the local behavior when needed:
+
+```sh
+cmake --preset plugin-release -DEHL_COPY_PLUGIN_AFTER_BUILD=OFF
+cmake --preset plugin-release \
+  -DEHL_USER_VST3_DIR=/alternate/VST3 \
+  -DEHL_USER_AU_DIR=/alternate/Components
+```
+
+The repository CI runs `tests/TestStageAndInstall.cmake` with synthetic bundles to prove staging, physical copy, exact replacement of an existing matching bundle, manifest recording, and the disabled path without writing to a runner's real plugin folders.
 
 ## License
 
