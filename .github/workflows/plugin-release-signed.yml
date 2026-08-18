@@ -183,7 +183,7 @@ jobs:
 
       - name: Sign, notarize, staple, and reverify
         id: signing
-        uses: EsionHsrahLatigid/ehl-macos-signing-action@d617fbee3eafb0d4cade2acc77f31da016712ce9
+        uses: EsionHsrahLatigid/ehl-macos-signing-action@6164c267c8ce723d91cee4b6150d513cfe99b708
         with:
           product-name: ${{ inputs.product_name }}
           input-zip: artifacts/macos/${{ inputs.product_name }}-latest-macos-arm64.zip
