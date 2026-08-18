@@ -51,7 +51,7 @@ For EHL releases, the certificate, Team ID, and App Store Connect Team API key m
 
 Before migration, configure a protected `release` environment in every caller repository with tag/branch restrictions and required reviewers. Keep the six signing values as organization or repository secrets explicitly mapped by the caller; do not duplicate same-named environment secrets. Signed runs for the same repository and tag are serialized without cancelling an in-flight notarization.
 
-Set `publish_release: false` on `plugin-release-signed.yml` callers for a non-publishing canary. Canary runs still resolve exact successful-CI provenance, use the protected `release` environment for macOS signing/notarization/stapling, and upload the signed macOS candidate artifact. They skip Windows candidate preparation and all GitHub Release mutation.
+Set `publish_release: false` on `plugin-release-signed.yml` callers for a non-publishing canary. A tag-based canary continues to accept an existing semver `tag_name`. To verify the current `main` CI artifact without creating a tag, pass its lowercase 40-character commit as `canary_sha` and leave `tag_name` empty. This tagless mode rejects publication, requires `canary_sha` to equal GitHub's current `main` HEAD, resolves exactly one successful canonical `main` push CI run, and verifies the unexpired macOS artifact, `SHA256SUMS.txt`, checksum, and inner ZIP before requesting access to the protected `release` environment. Canary runs sign, notarize, staple, independently reverify, and upload the macOS candidate while skipping Windows preparation and every GitHub Release mutation.
 
 ## Local staging
 

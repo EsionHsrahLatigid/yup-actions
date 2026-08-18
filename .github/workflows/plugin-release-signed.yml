@@ -12,6 +12,11 @@ on:
         required: false
         default: ''
         type: string
+      canary_sha:
+        description: Current main commit to verify without creating or resolving a tag
+        required: false
+        default: ''
+        type: string
       publish_release:
         description: Publish a GitHub Release after signing; false runs a non-publishing macOS canary
         required: false
@@ -41,7 +46,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.repository }}-${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}
+  group: release-${{ github.repository }}-${{ inputs.canary_sha != '' && inputs.canary_sha || inputs.tag_name != '' && inputs.tag_name || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -52,11 +57,11 @@ jobs:
       actions: read
       contents: read
     outputs:
-      mac_id: ${{ steps.artifacts.outputs.mac_id }}
-      run_id: ${{ steps.provenance.outputs.run_id }}
-      tag_name: ${{ steps.provenance.outputs.tag_name }}
-      version: ${{ steps.provenance.outputs.version }}
-      windows_id: ${{ steps.artifacts.outputs.windows_id }}
+      mac_id: ${{ steps.artifacts.outputs.mac_id || steps.canary.outputs.mac_id }}
+      run_id: ${{ steps.provenance.outputs.run_id || steps.canary.outputs.run_id }}
+      tag_name: ${{ steps.provenance.outputs.tag_name || steps.canary.outputs.tag_name }}
+      version: ${{ steps.provenance.outputs.version || steps.canary.outputs.version }}
+      windows_id: ${{ steps.artifacts.outputs.windows_id || steps.canary.outputs.windows_id }}
     steps:
       - name: Verify toolchain
         shell: bash
@@ -70,6 +75,7 @@ jobs:
           [[ "${gh_version%%.*}" -ge 2 ]]
 
       - name: Resolve tag and successful CI run
+        if: ${{ inputs.canary_sha == '' }}
         id: provenance
         shell: bash
         env:
@@ -119,6 +125,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Resolve exact artifact IDs
+        if: ${{ inputs.canary_sha == '' }}
         id: artifacts
         shell: bash
         env:
@@ -140,6 +147,37 @@ jobs:
             [[ "$windows_id" =~ ^[0-9]+$ ]]
           fi
           printf 'mac_id=%s\nwindows_id=%s\n' "$mac_id" "$windows_id" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout reusable workflow implementation
+        if: ${{ inputs.canary_sha != '' }}
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .yup-actions
+          persist-credentials: false
+
+      - name: Resolve and validate current-main canary
+        if: ${{ inputs.canary_sha != '' }}
+        id: canary
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PRODUCT: ${{ inputs.product_name }}
+          TAG_NAME: ${{ inputs.tag_name }}
+          CANARY_SHA: ${{ inputs.canary_sha }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+        run: |
+          set -euo pipefail
+          command -v python3
+          python3 .yup-actions/scripts/validate_canary_provenance.py \
+            --repository "$GH_REPO" \
+            --product-name "$PRODUCT" \
+            --tag-name "$TAG_NAME" \
+            --canary-sha "$CANARY_SHA" \
+            --publish-release "$PUBLISH_RELEASE" \
+            --github-output "$GITHUB_OUTPUT"
 
   sign-macos:
     name: Sign and notarize macOS

@@ -26,3 +26,15 @@ jobs:
             -DEHL_TEST_ROOT="$test_root" \
             -DEHL_STAGE_SCRIPT="$PWD/cmake/StageYupProducts.cmake" \
             -P tests/TestStageAndInstall.cmake
+
+      - name: Validate signed release workflow contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/validate_signed_release_workflow.py
+
+      - name: Test signed release canary provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
