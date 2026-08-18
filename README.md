@@ -36,7 +36,20 @@ jobs:
 
 Pin callers to a full commit SHA. The reusable workflow provides change classification, macOS arm64 and Windows x64 build/test/package jobs, compiler caching on macOS, checksummed latest ZIP artifacts, and a stable summary check. Both platform jobs initialize direct Git submodules, allowing plugin repositories to pin public shared modules without fetching nested submodules or adding cross-repository credentials.
 
-`plugin-release.yml` promotes the exact successful `main` CI artifacts for a version tag without rebuilding platform bundles.
+`plugin-release.yml` promotes the exact successful `main` CI artifacts for a version tag without rebuilding platform bundles. It remains available during the credential migration window.
+
+`plugin-release-signed.yml` is the fail-closed public-release path. It preserves exact CI artifact provenance, signs macOS `.app`, `.vst3`, and `.component` bundles with Developer ID Application, submits a temporary ZIP to Apple notarization, staples every accepted bundle, recreates the final ZIP, and publishes only after re-verification. Callers pin the workflow to a full commit SHA and explicitly map these secrets:
+
+- `MACOS_CERTIFICATE_P12_BASE64`
+- `MACOS_CERTIFICATE_PASSWORD`
+- `APPLE_TEAM_ID`
+- `APPLE_API_KEY_ID`
+- `APPLE_API_ISSUER_ID`
+- `APPLE_API_PRIVATE_KEY_P8_BASE64`
+
+For EHL releases, the certificate, Team ID, and App Store Connect Team API key must all belong to ISHII 2bit Program Office. Do not migrate callers until those secrets are configured; after migration, the unsigned workflow must no longer be used for public releases.
+
+Before migration, configure a protected `release` environment in every caller repository with tag/branch restrictions and required reviewers. Keep the six signing values as organization or repository secrets explicitly mapped by the caller; do not duplicate same-named environment secrets. Signed runs for the same repository and tag are serialized without cancelling an in-flight notarization.
 
 ## Local staging
 
