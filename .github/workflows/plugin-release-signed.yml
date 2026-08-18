@@ -12,6 +12,11 @@ on:
         required: false
         default: ''
         type: string
+      publish_release:
+        description: Publish a GitHub Release after signing; false runs a non-publishing macOS canary
+        required: false
+        default: true
+        type: boolean
     secrets:
       MACOS_CERTIFICATE_P12_BASE64:
         description: Base64-encoded Developer ID Application PKCS#12 archive
@@ -121,14 +126,19 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ steps.provenance.outputs.run_id }}
           PRODUCT: ${{ inputs.product_name }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
           artifacts="$(gh api --paginate "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts?per_page=100" --jq '.artifacts[] | [.id, .name, .expired] | @tsv')"
-          [[ "$(wc -l <<< "$artifacts" | tr -d ' ')" == 2 ]]
+          if [[ "$PUBLISH_RELEASE" == true ]]; then
+            [[ "$(wc -l <<< "$artifacts" | tr -d ' ')" == 2 ]]
+          fi
           mac_id="$(awk -F '\t' -v name="${PRODUCT}-latest-macos-arm64" '$2 == name && $3 == "false" { print $1 }' <<< "$artifacts")"
           windows_id="$(awk -F '\t' -v name="${PRODUCT}-latest-windows-x64" '$2 == name && $3 == "false" { print $1 }' <<< "$artifacts")"
           [[ "$mac_id" =~ ^[0-9]+$ ]]
-          [[ "$windows_id" =~ ^[0-9]+$ ]]
+          if [[ "$PUBLISH_RELEASE" == true ]]; then
+            [[ "$windows_id" =~ ^[0-9]+$ ]]
+          fi
           printf 'mac_id=%s\nwindows_id=%s\n' "$mac_id" "$windows_id" >> "$GITHUB_OUTPUT"
 
   sign-macos:
@@ -208,6 +218,7 @@ jobs:
   prepare-windows:
     name: Prepare Windows candidate
     needs: provenance
+    if: ${{ inputs.publish_release }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -255,6 +266,7 @@ jobs:
       - provenance
       - sign-macos
       - prepare-windows
+    if: ${{ inputs.publish_release }}
     runs-on: ubuntu-latest
     environment: release
     permissions:
