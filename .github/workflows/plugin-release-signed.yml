@@ -215,6 +215,109 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  verify-signed-macos:
+    name: Verify uploaded signed macOS candidate
+    needs:
+      - provenance
+      - sign-macos
+    runs-on: macos-15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download uploaded signed macOS candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-macos-release-candidate
+          path: uploaded-signed-macos
+
+      - name: Verify uploaded signed macOS candidate
+        shell: bash
+        env:
+          PRODUCT: ${{ inputs.product_name }}
+          VERSION: ${{ needs.provenance.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          candidate_dir="uploaded-signed-macos"
+          extract_dir="verified-signed-macos"
+          expected_zip="${PRODUCT}-${VERSION}-macos-arm64.zip"
+          expected_checksum="${expected_zip}.sha256"
+
+          entries=()
+          while IFS= read -r -d '' entry; do
+            entries+=("$entry")
+          done < <(find "$candidate_dir" -mindepth 1 -maxdepth 1 -print0)
+          [[ "${#entries[@]}" == 2 ]]
+          [[ -f "$candidate_dir/$expected_zip" ]]
+          [[ -f "$candidate_dir/$expected_checksum" ]]
+
+          line="$(cat "$candidate_dir/$expected_checksum")"
+          [[ "$line" =~ ^[0-9a-f]{64}\ \ [A-Za-z0-9._-]+$ ]]
+          [[ "${line#*  }" == "$expected_zip" ]]
+          (cd "$candidate_dir" && shasum -a 256 -c "$expected_checksum")
+
+          mkdir -p "$extract_dir"
+          ditto -x -k "$candidate_dir/$expected_zip" "$extract_dir"
+
+          apps=()
+          vst3s=()
+          components=()
+          code_containers=()
+          while IFS= read -r -d '' bundle; do
+            code_containers+=("$bundle")
+            case "$bundle" in
+              *.app) apps+=("$bundle") ;;
+              *.vst3) vst3s+=("$bundle") ;;
+              *.component) components+=("$bundle") ;;
+            esac
+          done < <(
+            find "$extract_dir" -type d \( \
+              -name '*.app' -o \
+              -name '*.vst3' -o \
+              -name '*.component' -o \
+              -name '*.framework' -o \
+              -name '*.xpc' -o \
+              -name '*.appex' -o \
+              -name '*.plugin' \
+            \) -print0
+          )
+          [[ "${#apps[@]}" == 1 ]]
+          [[ "${#vst3s[@]}" == 1 ]]
+          [[ "${#components[@]}" == 1 ]]
+          [[ "${#code_containers[@]}" == 3 ]]
+
+          verify_bundle() {
+            local bundle="$1"
+            local details team_id timestamp
+
+            codesign --verify --deep --strict --verbose=4 "$bundle"
+            details="$(codesign -dv --verbose=4 "$bundle" 2>&1)"
+            grep -Eq '^Authority=Developer ID Application:' <<< "$details"
+
+            team_id="$(awk -F= '$1 == "TeamIdentifier" { print $2; exit }' <<< "$details")"
+            [[ -n "$team_id" ]]
+            [[ "$team_id" != "not set" ]]
+
+            grep -Eq '(^Runtime Version=|flags=.*runtime)' <<< "$details"
+            timestamp="$(awk -F= '$1 == "Timestamp" { print $2; exit }' <<< "$details")"
+            [[ -n "$timestamp" ]]
+            [[ "$timestamp" != "none" ]]
+
+            if codesign -d --entitlements :- "$bundle" 2>/dev/null \
+              | plutil -extract com.apple.security.get-task-allow raw -o - - >/dev/null 2>&1; then
+              echo "get-task-allow entitlement is present in $bundle" >&2
+              exit 1
+            fi
+
+            xcrun stapler validate "$bundle"
+          }
+
+          verify_bundle "${apps[0]}"
+          verify_bundle "${vst3s[0]}"
+          verify_bundle "${components[0]}"
+          spctl --assess --type execute --verbose=4 "${apps[0]}"
+
   prepare-windows:
     name: Prepare Windows candidate
     needs: provenance
@@ -264,7 +367,7 @@ jobs:
     name: Publish verified release
     needs:
       - provenance
-      - sign-macos
+      - verify-signed-macos
       - prepare-windows
     if: ${{ inputs.publish_release }}
     runs-on: ubuntu-latest
